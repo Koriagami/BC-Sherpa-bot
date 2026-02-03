@@ -12,6 +12,7 @@ const { createTodo, addSubscribers } = require("./basecamp");
 const { resolveBasecampPersonIds, resolveBasecampPersonForSlackUser } = require("./participants");
 const { getValidAccessToken } = require("./basecamp-token");
 const openaiThrottle = require("./openai-throttle");
+const channelBindings = require("./channel-bindings");
 
 async function run() {
   const config = loadConfig();
@@ -30,12 +31,84 @@ async function run() {
     clientSecret: config.basecamp.clientSecret || undefined,
     tokenFilePath: config.basecamp.tokenFilePath,
   };
-  const basecampConfig = {
-    accountId: config.basecamp.accountId,
-    projectId: config.basecamp.projectId,
-    todolistId: config.basecamp.todolistId,
-    getAccessToken: (opts) => getValidAccessToken(tokenOptions, opts || {}),
-  };
+  const bindingsPath = config.basecamp.channelBindingsPath;
+
+  function getBasecampConfigForChannel(channelId) {
+    const binding = channelBindings.get(channelId, bindingsPath);
+    const projectId = binding?.projectId ?? config.basecamp.projectId;
+    const todolistId = binding?.todolistId ?? config.basecamp.todolistId;
+    return {
+      accountId: config.basecamp.accountId,
+      projectId,
+      todolistId,
+      getAccessToken: (opts) => getValidAccessToken(tokenOptions, opts || {}),
+    };
+  }
+
+  function resolveProjectAndTodolist(channelId) {
+    const binding = channelBindings.get(channelId, bindingsPath);
+    if (binding?.projectId && binding?.todolistId) return binding;
+    if (config.basecamp.projectId && config.basecamp.todolistId) {
+      return { projectId: config.basecamp.projectId, todolistId: config.basecamp.todolistId };
+    }
+    return null;
+  }
+
+  slackApp.command("/sherpa", async ({ command, ack, client }) => {
+    try {
+      await ack();
+    } catch (ackErr) {
+      console.error("Slash command ack failed:", ackErr);
+      return;
+    }
+    try {
+      const text = (command.text || "").trim();
+      const channelId = command.channel_id;
+      const args = text.split(/\s+/).filter(Boolean);
+
+      if (args[0] === "bind" && args.length >= 3) {
+        const [, projectId, todolistId] = args;
+        channelBindings.set(channelId, { projectId, todolistId }, bindingsPath);
+        await client.chat.postEphemeral({
+          channel: channelId,
+          user: command.user_id,
+          text: `This channel is now bound to Basecamp project \`${projectId}\` and to-do list \`${todolistId}\`. React with :${config.triggerEmoji}: on a thread to extract issues there.`,
+        });
+        return;
+      }
+
+      if (args[0] === "unbind") {
+        channelBindings.unset(channelId, bindingsPath);
+        await client.chat.postEphemeral({
+          channel: channelId,
+          user: command.user_id,
+          text: "Channel binding removed. Use `/sherpa bind <project_id> <todolist_id>` to bind again, or set BASECAMP_PROJECT_ID and BASECAMP_TODOLIST_ID in .env as default.",
+        });
+        return;
+      }
+
+      const current = resolveProjectAndTodolist(channelId);
+      const help = current
+        ? `This channel uses project \`${current.projectId}\`, to-do list \`${current.todolistId}\` (${channelBindings.get(channelId, bindingsPath) ? "channel binding" : "env default"}).`
+        : "This channel is not bound. Use `/sherpa bind <project_id> <todolist_id>` to bind it to a Basecamp project and to-do list.";
+      await client.chat.postEphemeral({
+        channel: channelId,
+        user: command.user_id,
+        text: `*BC-Sherpa commands*\n• \`/sherpa bind <project_id> <todolist_id>\` – bind this channel to a BC project and to-do list\n• \`/sherpa unbind\` – remove channel binding\n• \`/sherpa\` – show this help\n\n${help}`,
+      });
+    } catch (err) {
+      console.error("Slash command /sherpa failed:", err);
+      try {
+        await client.chat.postEphemeral({
+          channel: command.channel_id,
+          user: command.user_id,
+          text: `Something went wrong: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      } catch (e) {
+        console.error("Could not post error to user:", e);
+      }
+    }
+  });
 
   slackApp.event("reaction_added", async ({ event, client }) => {
     if (event.reaction !== config.triggerEmoji) return;
@@ -46,6 +119,22 @@ async function run() {
 
     if (!channelId || !messageTs) return;
 
+    const resolved = resolveProjectAndTodolist(channelId);
+    if (!resolved) {
+      try {
+        await postThreadReply(
+          client,
+          channelId,
+          messageTs,
+          "This channel isn’t bound to a Basecamp project. Use `/sherpa bind <project_id> <todolist_id>` in this channel to bind it, or set BASECAMP_PROJECT_ID and BASECAMP_TODOLIST_ID in .env as default."
+        );
+      } catch (e) {
+        console.warn("Could not post bind-instructions reply:", e);
+      }
+      return;
+    }
+
+    const basecampConfig = getBasecampConfigForChannel(channelId);
     let statusMessageTs;
 
     try {
@@ -99,7 +188,7 @@ async function run() {
         );
       }
 
-      let descriptionForBc = description;
+      let descriptionForBc = escapeHtml(description);
       const reporterSlackId = messages[0]?.user;
       const reporterBc = reporterSlackId
         ? await resolveBasecampPersonForSlackUser(client, basecampConfig, reporterSlackId)
@@ -115,6 +204,7 @@ async function run() {
       if (permalink && descriptionForBc.includes(" in Slack")) {
         descriptionForBc = descriptionForBc.replace(/ in Slack/, ` in <a href="${permalink}">Slack</a>`);
       }
+      descriptionForBc = descriptionForBc.replace(/\n/g, "<br>");
 
       const todo = await createTodo(basecampConfig, {
         content: title,
@@ -125,7 +215,7 @@ async function run() {
         try {
           await addSubscribers(
             basecampConfig,
-            config.basecamp.projectId,
+            basecampConfig.projectId,
             todo.id,
             participantIds
           );

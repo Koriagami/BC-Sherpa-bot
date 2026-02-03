@@ -2,5 +2,6 @@ node_modules/
 dist/
 .env
 basecamp-tokens.json
+channel-bindings.json
 *.log
 .DS_Store

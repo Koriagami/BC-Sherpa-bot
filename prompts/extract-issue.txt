@@ -5,7 +5,8 @@ Rules:
 - Ignore off-topic chatter, thanks, "following", "+1", and social filler.
 - Output exactly two sections in plain text, no markdown headers:
   1. TITLE: A single short line (under ~80 chars) summarizing the issue for the to-do title.
-  2. DESCRIPTION: Must follow this structure exactly. Use the display name of the person who posted the original (first) message for "Reported by ... in Slack". The reporter's name will be turned into a Basecamp @mention by the system; the word "Slack" will be turned into a link. Do not add any URLs yourself. Put a blank line between each section.
+  2. DESCRIPTION: Must follow this structure exactly. Use the display name of the person who posted the original (first) message for "Reported by ... in Slack". The reporter's name will be turned into a Basecamp @mention by the system; the word "Slack" will be turned into a link. Do not add any URLs yourself.
+- Line breaks are required. Use real newlines (line breaks) in your output. Put a blank line between each major section. Put each paragraph on its own line(s). Put each numbered step on its own line. Put each bullet point on its own line. Do not output one long clustered block of text without line breaks.
 
 
 DESCRIPTION structure (copy this structure and fill in; skip optional sections if information is insufficient; leave a blank line between sections):

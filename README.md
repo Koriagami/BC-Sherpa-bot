@@ -93,7 +93,21 @@ A Slack bot that turns reported issues into Basecamp tasks. Someone reports an i
 2. Under **App Credentials**, find **Signing Secret**.
 3. Click **Show** and copy the value → this is your **`SLACK_SIGNING_SECRET`**.
 
-#### 1.6 Invite the bot to channels
+#### 1.6 Create the slash command (for channel bindings)
+
+1. In the left sidebar, open **Slash Commands**.
+2. Click **Create New Command**.
+3. Fill in:
+   - **Command**: `sherpa` (Slack will show it as `/sherpa`; enter without the slash in some UIs, or `/sherpa` if the field expects the full command).
+   - **Short Description**: e.g. `Bind this channel to a Basecamp project and to-do list`
+   - **Usage Hint**: e.g. `bind <project_id> <todolist_id>` or leave empty.
+4. Save changes.
+
+If you get **"dispatch_failed"** when using `/sherpa`, ensure the bot is running, Socket Mode is enabled, and the command name in the app config matches (the code listens for `/sherpa`). Restart the bot after changing the slash command.
+
+This command is used to bind each channel to a Basecamp project and to-do list (see [Channel bindings](#channel-bindings) below).
+
+#### 1.7 Invite the bot to channels
 
 - In each **public channel** where you want the bot to work: type `/invite @YourBotName` (or add the app via channel details).
 - For **private channels**: open the channel → **Integrations** → **Add apps** → add your app.
@@ -125,7 +139,7 @@ To use a different emoji name, set **`TRIGGER_EMOJI`** in `.env` to that name (e
 
 ### 4. Basecamp (OAuth and IDs)
 
-The bot uses the **Basecamp 3 API** (`https://3.basecampapi.com`). You need an OAuth 2 access token and three IDs: account, project, and to-do list.
+The bot uses the **Basecamp 3 API** (`https://3.basecampapi.com`). You need an OAuth 2 access token and your **account ID**. **Project ID** and **to-do list ID** can be set in `.env` as defaults or per channel via the `/sherpa bind` command (see [Channel bindings](#channel-bindings)).
 
 #### 4.1 Create a Basecamp API app and get an access token
 
@@ -180,23 +194,36 @@ The bot uses the **Basecamp 3 API** (`https://3.basecampapi.com`). You need an O
   `GET https://3.basecampapi.com/1234567890/authorization.json`  
   (use the same number you see in your Basecamp URLs). The account ID in the URL is **`BASECAMP_ACCOUNT_ID`**.
 
-#### 4.3 Get Project ID (`BASECAMP_PROJECT_ID`)
+#### 4.3 Get Project ID and To-do list ID (for `.env` or `/sherpa bind`)
 
-- In Basecamp, open the **project** where you want new to-dos to be created. The URL is like:  
+These IDs are not sensitive; they identify which project and list receive new to-dos.
+
+- **Project ID**: In Basecamp, open the **project**. The URL is like:  
   `https://3.basecamp.com/1234567890/projects/9876543210`  
-  The **second number** (`9876543210`) is the **Project ID** → **`BASECAMP_PROJECT_ID`**.
-- Or: `GET https://3.basecampapi.com/{ACCOUNT_ID}/projects.json` and use the `id` of the project you want.
-
-#### 4.4 Get To-do list ID (`BASECAMP_TODOLIST_ID`)
-
-- In that project, open **To-dos** and click the **to-do list** (e.g. “To-dos”, “Issues”, or a custom list) where new tasks should go. The URL is like:  
+  The **second number** (`9876543210`) is the **Project ID**.
+- **To-do list ID**: In that project, open **To-dos** and click the **to-do list**. The URL is like:  
   `https://3.basecamp.com/1234567890/projects/9876543210/todolists/5555555555`  
-  The **last number** (`5555555555`) is the **To-do list ID** → **`BASECAMP_TODOLIST_ID`**.
-- Or via API:  
-  `GET https://3.basecampapi.com/{ACCOUNT_ID}/buckets/{PROJECT_ID}/todosets.json`  
-  to get the todoset `id`, then  
-  `GET https://3.basecampapi.com/{ACCOUNT_ID}/buckets/{PROJECT_ID}/todosets/{TODOSET_ID}/todolists.json`  
-  and use the `id` of the list you want.
+  The **last number** (`5555555555`) is the **To-do list ID**.
+
+You can set **`BASECAMP_PROJECT_ID`** and **`BASECAMP_TODOLIST_ID`** in `.env` as **defaults** (used when a channel has no binding), or bind each channel with `/sherpa bind <project_id> <todolist_id>` (see [Channel bindings](#channel-bindings)).
+
+#### 4.4 Channel bindings (multiple channels → different Basecamp lists)
+
+You can use **one bot** for **multiple Slack channels**, each sending issues to a **different Basecamp project and to-do list**.
+
+1. In each channel where you want the bot to create to-dos, run:
+   ```
+   /sherpa bind <project_id> <todolist_id>
+   ```
+   Use the project and to-do list IDs from [4.3](#43-get-project-id-and-to-do-list-id-for-env-or-sherpa-bind). The channel is then **bound** to that project/list.
+2. When someone adds the trigger emoji to a thread in that channel, the bot creates the to-do in the **bound** project and list.
+3. **Other commands:**
+   - **`/sherpa`** (no args) – show help and current binding for the channel.
+   - **`/sherpa unbind`** – remove the channel binding (the bot will use **`BASECAMP_PROJECT_ID`** and **`BASECAMP_TODOLIST_ID`** from `.env` as default, if set).
+
+Bindings are stored in **`channel-bindings.json`** (or the path in **`CHANNEL_BINDINGS_FILE`**). That file is created automatically and is listed in `.gitignore` so each deployment can have its own bindings.
+
+If a channel has **no** binding and **no** env default, the bot replies in the thread asking you to run `/sherpa bind <project_id> <todolist_id>`.
 
 #### 4.5 Optional: add thread participants as subscribers
 
@@ -286,8 +313,9 @@ Set only **`BASECAMP_ACCESS_TOKEN`** in `.env`. The bot will use it until it exp
 | **`OPENAI_CIRCUIT_BREAKER_SECONDS`** | No | Pause duration in seconds when circuit opens (default: 120). |
 | **`BASECAMP_ACCOUNT_ID`** | Yes | Number in Basecamp URL (e.g. `https://3.basecamp.com/**1234567890**/...`) or from API. |
 | **`BASECAMP_ACCESS_TOKEN`** | If no token file | OAuth access token. Omit if using `node scripts/basecamp-oauth.js` (tokens stored in `basecamp-tokens.json`). |
-| **`BASECAMP_PROJECT_ID`** | Yes | Project URL: `.../projects/**9876543210**` or from `GET .../projects.json`. |
-| **`BASECAMP_TODOLIST_ID`** | Yes | To-do list URL: `.../todolists/**5555555555**` or from todolists API. |
+| **`BASECAMP_PROJECT_ID`** | No (default) | Project URL: `.../projects/**9876543210**`. Used when a channel has no binding. |
+| **`BASECAMP_TODOLIST_ID`** | No (default) | To-do list URL: `.../todolists/**5555555555**`. Used when a channel has no binding. |
+| **`CHANNEL_BINDINGS_FILE`** | No | Path to channel bindings JSON. Default: `channel-bindings.json`. |
 | **`BASECAMP_CLIENT_ID`** | For auto-refresh | App **Client ID** from launchpad.37signals.com (needed for token refresh and OAuth script). |
 | **`BASECAMP_CLIENT_SECRET`** | For auto-refresh | App **Client Secret** from launchpad.37signals.com (needed for token refresh and OAuth script). |
 | **`BASECAMP_REDIRECT_URI`** | For OAuth script | Exact redirect URI registered for the app (e.g. `http://localhost:3456/callback`). Used by `node scripts/basecamp-oauth.js`. |
