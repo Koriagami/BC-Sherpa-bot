@@ -76,8 +76,21 @@ async function postThreadReply(client, channelId, threadTs, text) {
   return result.ts;
 }
 
+/**
+ * Get a permalink to a message (for "Reported by ... in Slack" link in Basecamp).
+ */
+async function getMessagePermalink(client, channelId, messageTs) {
+  try {
+    const result = await client.chat.getPermalink({ channel: channelId, message_ts: messageTs });
+    return result.permalink || null;
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   fetchThread,
   formatThreadForPrompt,
   postThreadReply,
+  getMessagePermalink,
 };

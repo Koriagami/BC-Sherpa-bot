@@ -5,11 +5,13 @@ const {
   fetchThread,
   formatThreadForPrompt,
   postThreadReply,
+  getMessagePermalink,
 } = require("./slack");
 const { extractIssueFromThread } = require("./openai-extract");
 const { createTodo, addSubscribers } = require("./basecamp");
 const { resolveBasecampPersonIds } = require("./participants");
 const { getValidAccessToken } = require("./basecamp-token");
+const openaiThrottle = require("./openai-throttle");
 
 async function run() {
   const config = loadConfig();
@@ -60,13 +62,32 @@ async function run() {
         return;
       }
 
+      const throttleResult = openaiThrottle.allow();
+      if (!throttleResult.allowed) {
+        const msg =
+          throttleResult.reason === "circuit_open"
+            ? `OpenAI temporarily paused after repeated failures. Try again in ${throttleResult.retryAfterSeconds}s.`
+            : `Too many OpenAI requests; try again in ${throttleResult.retryAfterSeconds}s.`;
+        await updateOrPost(client, channelId, messageTs, statusMessageTs, msg);
+        return;
+      }
+
       const threadText = formatThreadForPrompt(messages);
-      const { title, description } = await extractIssueFromThread(
-        openai,
-        config.extractionPrompt,
-        config.openai.model,
-        threadText
-      );
+      let title, description;
+      try {
+        const extracted = await extractIssueFromThread(
+          openai,
+          config.extractionPrompt,
+          config.openai.model,
+          threadText
+        );
+        openaiThrottle.recordSuccess();
+        title = extracted.title;
+        description = extracted.description;
+      } catch (extractErr) {
+        openaiThrottle.recordFailure();
+        throw extractErr;
+      }
 
       let completionSubscriberIds;
       if (config.basecamp.addParticipantsAsSubscribers) {
@@ -78,9 +99,15 @@ async function run() {
         );
       }
 
+      let descriptionForBc = description;
+      const permalink = await getMessagePermalink(client, channelId, messageTs);
+      if (permalink && descriptionForBc.includes(" in Slack")) {
+        descriptionForBc = descriptionForBc.replace(/ in Slack/, ` in <a href="${permalink}">Slack</a>`);
+      }
+
       const todo = await createTodo(basecampConfig, {
         content: title,
-        description,
+        description: descriptionForBc,
         completionSubscriberIds,
       });
 

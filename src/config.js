@@ -5,10 +5,28 @@ const DEFAULT_EXTRACTION_PROMPT = `You are given a Slack thread where someone re
 
 Rules:
 - Ignore off-topic chatter, thanks, "following", "+1", and social filler.
-- Keep: what broke, steps to reproduce, environment, error messages, who reported it, and any proposed fix or context.
 - Output exactly two sections in plain text, no markdown headers:
   1. TITLE: A single short line (under ~80 chars) summarizing the issue for the to-do title.
-  2. DESCRIPTION: A clear, concise description with the key details (bullet points or short paragraphs).`;
+  2. DESCRIPTION: Must follow this structure exactly. Use the display name of the person who posted the original (first) message for "Reported by ... in Slack". The word "Slack" will be turned into a link by the system; do not add a URL yourself.
+
+DESCRIPTION structure (copy this structure and fill in; skip optional sections if information is insufficient):
+
+Reported by [display name of person who reported] in Slack
+
+[Main issue description - mandatory. One or more brief, clear paragraphs describing the issue.]
+
+Steps:
+1) [step one]
+2) [step two]
+...
+[Optional: numbered list of steps to reproduce. Include only if clear from the thread; otherwise omit the entire Steps section.]
+
+Expected result: [Optional: brief description of expected result. Omit if unavailable.]
+
+Actual result: [Optional: brief description of actual result. Omit if unavailable.]
+
+Important comments:
+- [Optional: bullet list of important clues, follow-ups, or context from the thread. Omit section if none.]`;
 
 function loadEnv() {
   const envPath = path.resolve(process.cwd(), ".env");

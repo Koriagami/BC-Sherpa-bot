@@ -119,6 +119,8 @@ To use a different emoji name, set **`TRIGGER_EMOJI`** in `.env` to that name (e
 4. Put it in `.env` as **`OPENAI_API_KEY`**.
 5. Optionally set **`OPENAI_MODEL`** (default: `gpt-4o-mini`). For example: `gpt-4o` for higher quality, `gpt-4o-mini` for lower cost.
 
+**OpenAI failsafe:** The bot limits how often it calls OpenAI (default: 15 requests per minute) and uses a circuit breaker: after 5 consecutive OpenAI failures it stops calling OpenAI for 2 minutes. This prevents runaway usage from bugs (e.g. a loop). You can tune this with `OPENAI_MAX_REQUESTS_PER_MINUTE`, `OPENAI_CIRCUIT_BREAKER_FAILURES`, and `OPENAI_CIRCUIT_BREAKER_SECONDS` in `.env`.
+
 ---
 
 ### 4. Basecamp (OAuth and IDs)
@@ -279,6 +281,9 @@ Set only **`BASECAMP_ACCESS_TOKEN`** in `.env`. The bot will use it until it exp
 | **`TRIGGER_EMOJI`** | No | Emoji name without colons. Default: `basecamp`. |
 | **`OPENAI_API_KEY`** | Yes | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) → Create new secret key. |
 | **`OPENAI_MODEL`** | No | e.g. `gpt-4o-mini` (default) or `gpt-4o`. |
+| **`OPENAI_MAX_REQUESTS_PER_MINUTE`** | No | Max OpenAI calls per minute (default: 15). Failsafe against runaway usage. |
+| **`OPENAI_CIRCUIT_BREAKER_FAILURES`** | No | After this many consecutive OpenAI failures, pause all OpenAI calls (default: 5). |
+| **`OPENAI_CIRCUIT_BREAKER_SECONDS`** | No | Pause duration in seconds when circuit opens (default: 120). |
 | **`BASECAMP_ACCOUNT_ID`** | Yes | Number in Basecamp URL (e.g. `https://3.basecamp.com/**1234567890**/...`) or from API. |
 | **`BASECAMP_ACCESS_TOKEN`** | If no token file | OAuth access token. Omit if using `node scripts/basecamp-oauth.js` (tokens stored in `basecamp-tokens.json`). |
 | **`BASECAMP_PROJECT_ID`** | Yes | Project URL: `.../projects/**9876543210**` or from `GET .../projects.json`. |
