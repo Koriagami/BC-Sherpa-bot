@@ -33,18 +33,6 @@ async function run() {
   };
   const bindingsPath = config.basecamp.channelBindingsPath;
 
-  function getBasecampConfigForChannel(channelId) {
-    const binding = channelBindings.get(channelId, bindingsPath);
-    const projectId = binding?.projectId ?? config.basecamp.projectId;
-    const todolistId = binding?.todolistId ?? config.basecamp.todolistId;
-    return {
-      accountId: config.basecamp.accountId,
-      projectId,
-      todolistId,
-      getAccessToken: (opts) => getValidAccessToken(tokenOptions, opts || {}),
-    };
-  }
-
   function resolveProjectAndTodolist(channelId) {
     const binding = channelBindings.get(channelId, bindingsPath);
     if (binding?.projectId && binding?.todolistId) return binding;
@@ -53,6 +41,20 @@ async function run() {
     }
     return null;
   }
+
+  function getBasecampConfigForChannel(channelId) {
+    const resolved = resolveProjectAndTodolist(channelId);
+    if (!resolved) return null;
+    return {
+      accountId: config.basecamp.accountId,
+      projectId: resolved.projectId,
+      todolistId: resolved.todolistId,
+      getAccessToken: (opts) => getValidAccessToken(tokenOptions, opts || {}),
+    };
+  }
+
+  const BIND_INSTRUCTIONS =
+    "This channel isn't bound to a Basecamp project. Use `/sherpa bind <project_id> <todolist_id>` in this channel to bind it, or set BASECAMP_PROJECT_ID and BASECAMP_TODOLIST_ID in .env as default.";
 
   slackApp.command("/sherpa", async ({ command, ack, client }) => {
     try {
@@ -90,7 +92,7 @@ async function run() {
       const current = resolveProjectAndTodolist(channelId);
       const help = current
         ? `This channel uses project \`${current.projectId}\`, to-do list \`${current.todolistId}\` (${channelBindings.get(channelId, bindingsPath) ? "channel binding" : "env default"}).`
-        : "This channel is not bound. Use `/sherpa bind <project_id> <todolist_id>` to bind it to a Basecamp project and to-do list.";
+        : BIND_INSTRUCTIONS;
       await client.chat.postEphemeral({
         channel: channelId,
         user: command.user_id,
@@ -119,22 +121,15 @@ async function run() {
 
     if (!channelId || !messageTs) return;
 
-    const resolved = resolveProjectAndTodolist(channelId);
-    if (!resolved) {
+    const basecampConfig = getBasecampConfigForChannel(channelId);
+    if (!basecampConfig) {
       try {
-        await postThreadReply(
-          client,
-          channelId,
-          messageTs,
-          "This channel isn’t bound to a Basecamp project. Use `/sherpa bind <project_id> <todolist_id>` in this channel to bind it, or set BASECAMP_PROJECT_ID and BASECAMP_TODOLIST_ID in .env as default."
-        );
+        await postThreadReply(client, channelId, messageTs, BIND_INSTRUCTIONS);
       } catch (e) {
         console.warn("Could not post bind-instructions reply:", e);
       }
       return;
     }
-
-    const basecampConfig = getBasecampConfigForChannel(channelId);
     let statusMessageTs;
 
     try {

@@ -3,11 +3,15 @@ const path = require("path");
 
 const DEFAULT_PATH = path.resolve(process.cwd(), "channel-bindings.json");
 
+function resolvePath(filePath) {
+  return path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
+}
+
 /**
  * Load channel -> { projectId, todolistId } bindings from disk.
  */
 function load(filePath = DEFAULT_PATH) {
-  const p = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
+  const p = resolvePath(filePath);
   if (!fs.existsSync(p)) return {};
   try {
     const data = fs.readFileSync(p, "utf-8");
@@ -22,8 +26,7 @@ function load(filePath = DEFAULT_PATH) {
  * Save bindings to disk.
  */
 function save(bindings, filePath = DEFAULT_PATH) {
-  const p = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
-  fs.writeFileSync(p, JSON.stringify(bindings, null, 2), "utf-8");
+  fs.writeFileSync(resolvePath(filePath), JSON.stringify(bindings, null, 2), "utf-8");
 }
 
 /**

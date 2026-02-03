@@ -2,6 +2,15 @@ const { listPeople } = require("./basecamp");
 
 const cache = new Map();
 
+async function getPeopleList(basecampConfig) {
+  let bcPeople = cache.get(basecampConfig.accountId);
+  if (!bcPeople) {
+    bcPeople = await listPeople(basecampConfig);
+    cache.set(basecampConfig.accountId, bcPeople);
+  }
+  return Array.isArray(bcPeople) ? bcPeople : [];
+}
+
 /**
  * Get Basecamp person IDs for the given Slack user IDs by matching email.
  * Requires Slack users:read.email scope to get emails.
@@ -9,12 +18,7 @@ const cache = new Map();
 async function resolveBasecampPersonIds(slackClient, basecampConfig, slackUserIds) {
   if (slackUserIds.length === 0) return [];
 
-  let bcPeople = cache.get(basecampConfig.accountId);
-  if (!bcPeople) {
-    bcPeople = await listPeople(basecampConfig);
-    cache.set(basecampConfig.accountId, bcPeople);
-  }
-  const peopleList = Array.isArray(bcPeople) ? bcPeople : [];
+  const peopleList = await getPeopleList(basecampConfig);
 
   const emailToId = new Map(
     peopleList
@@ -52,12 +56,7 @@ async function resolveBasecampPersonForSlackUser(slackClient, basecampConfig, sl
   const ids = await resolveBasecampPersonIds(slackClient, basecampConfig, [slackUserId]);
   if (ids.length === 0) return null;
 
-  let bcPeople = cache.get(basecampConfig.accountId);
-  if (!bcPeople) {
-    bcPeople = await listPeople(basecampConfig);
-    cache.set(basecampConfig.accountId, bcPeople);
-  }
-  const peopleList = Array.isArray(bcPeople) ? bcPeople : [];
+  const peopleList = await getPeopleList(basecampConfig);
   const person = peopleList.find((p) => p != null && p.id === ids[0]);
   if (!person || !person.attachable_sgid) return null;
   return {

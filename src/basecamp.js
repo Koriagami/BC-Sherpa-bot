@@ -49,9 +49,6 @@ async function createTodo(config, params) {
   if (params.assigneeIds?.length) {
     body.assignee_ids = params.assigneeIds;
   }
-  if (params.completionSubscriberIds?.length) {
-    body.completion_subscriber_ids = params.completionSubscriberIds;
-  }
 
   const res = await basecampFetch(
     config,
