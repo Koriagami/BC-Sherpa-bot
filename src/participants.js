@@ -38,4 +38,26 @@ async function resolveBasecampPersonIds(slackClient, basecampConfig, slackUserId
   return result;
 }
 
-module.exports = { resolveBasecampPersonIds };
+/**
+ * Resolve a single Slack user to the matching Basecamp person (by email).
+ * Returns { id, attachable_sgid, name } for use in a BC mention, or null.
+ */
+async function resolveBasecampPersonForSlackUser(slackClient, basecampConfig, slackUserId) {
+  const ids = await resolveBasecampPersonIds(slackClient, basecampConfig, [slackUserId]);
+  if (ids.length === 0) return null;
+
+  let bcPeople = cache.get(basecampConfig.accountId);
+  if (!bcPeople) {
+    bcPeople = await listPeople(basecampConfig);
+    cache.set(basecampConfig.accountId, bcPeople);
+  }
+  const person = bcPeople.find((p) => p.id === ids[0]);
+  if (!person || !person.attachable_sgid) return null;
+  return {
+    id: person.id,
+    attachable_sgid: person.attachable_sgid,
+    name: person.name ?? "Someone",
+  };
+}
+
+module.exports = { resolveBasecampPersonIds, resolveBasecampPersonForSlackUser };

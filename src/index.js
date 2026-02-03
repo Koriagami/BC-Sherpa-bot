@@ -9,7 +9,7 @@ const {
 } = require("./slack");
 const { extractIssueFromThread } = require("./openai-extract");
 const { createTodo, addSubscribers } = require("./basecamp");
-const { resolveBasecampPersonIds } = require("./participants");
+const { resolveBasecampPersonIds, resolveBasecampPersonForSlackUser } = require("./participants");
 const { getValidAccessToken } = require("./basecamp-token");
 const openaiThrottle = require("./openai-throttle");
 
@@ -89,10 +89,10 @@ async function run() {
         throw extractErr;
       }
 
-      let completionSubscriberIds;
+      let participantIds;
       if (config.basecamp.addParticipantsAsSubscribers) {
         const uniqueSlackIds = [...new Set(messages.map((m) => m.user))];
-        completionSubscriberIds = await resolveBasecampPersonIds(
+        participantIds = await resolveBasecampPersonIds(
           client,
           basecampConfig,
           uniqueSlackIds
@@ -100,6 +100,17 @@ async function run() {
       }
 
       let descriptionForBc = description;
+      const reporterSlackId = messages[0]?.user;
+      const reporterBc = reporterSlackId
+        ? await resolveBasecampPersonForSlackUser(client, basecampConfig, reporterSlackId)
+        : null;
+      if (reporterBc) {
+        descriptionForBc = descriptionForBc.replace(
+          /Reported by (.+?) in Slack/,
+          (_, _name) =>
+            `Reported by <bc-mention sgid="${reporterBc.attachable_sgid}">${escapeHtml(reporterBc.name)}</bc-mention> in Slack`
+        );
+      }
       const permalink = await getMessagePermalink(client, channelId, messageTs);
       if (permalink && descriptionForBc.includes(" in Slack")) {
         descriptionForBc = descriptionForBc.replace(/ in Slack/, ` in <a href="${permalink}">Slack</a>`);
@@ -108,16 +119,15 @@ async function run() {
       const todo = await createTodo(basecampConfig, {
         content: title,
         description: descriptionForBc,
-        completionSubscriberIds,
       });
 
-      if (config.basecamp.addParticipantsAsSubscribers && completionSubscriberIds?.length) {
+      if (config.basecamp.addParticipantsAsSubscribers && participantIds?.length) {
         try {
           await addSubscribers(
             basecampConfig,
             config.basecamp.projectId,
             todo.id,
-            completionSubscriberIds
+            participantIds
           );
         } catch (e) {
           console.warn("Failed to add subscribers to BC task:", e);
@@ -180,6 +190,15 @@ async function getLastBotReplyTs(client, channelId, threadTs) {
     if (m?.bot_id && m.ts) return m.ts;
   }
   return null;
+}
+
+function escapeHtml(text) {
+  if (typeof text !== "string") return "";
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 run().catch((err) => {
