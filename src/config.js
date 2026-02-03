@@ -82,9 +82,8 @@ function loadConfig() {
       projectId: getEnvOptional("BASECAMP_PROJECT_ID", null),
       todolistId: getEnvOptional("BASECAMP_TODOLIST_ID", null),
       channelBindingsPath: getEnvOptional("CHANNEL_BINDINGS_FILE", "channel-bindings.json"),
-      addParticipantsAsSubscribers: getEnvOptional(
-        "BASECAMP_ADD_PARTICIPANTS_AS_SUBSCRIBERS",
-        "false"
+      addParticipantsAsSubscribers: String(
+        getEnvOptional("BASECAMP_ADD_PARTICIPANTS_AS_SUBSCRIBERS", "false") ?? "false"
       ).toLowerCase() === "true",
       clientId: getEnvOptional("BASECAMP_CLIENT_ID", ""),
       clientSecret: getEnvOptional("BASECAMP_CLIENT_SECRET", ""),

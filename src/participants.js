@@ -14,11 +14,16 @@ async function resolveBasecampPersonIds(slackClient, basecampConfig, slackUserId
     bcPeople = await listPeople(basecampConfig);
     cache.set(basecampConfig.accountId, bcPeople);
   }
+  const peopleList = Array.isArray(bcPeople) ? bcPeople : [];
 
   const emailToId = new Map(
-    bcPeople
-      .filter((p) => p.email_address != null && String(p.email_address).trim() !== "")
-      .map((p) => [String(p.email_address).toLowerCase().trim(), p.id])
+    peopleList
+      .filter((p) => p != null && p.email_address != null && String(p.email_address).trim() !== "")
+      .map((p) => {
+        const email = String(p.email_address);
+        return [email ? email.toLowerCase().trim() : "", p.id];
+      })
+      .filter(([email]) => email !== "")
   );
   const result = [];
 
@@ -26,8 +31,9 @@ async function resolveBasecampPersonIds(slackClient, basecampConfig, slackUserId
     try {
       const r = await slackClient.users.info({ user: slackUserId });
       const email = r.user?.profile?.email;
-      if (email != null && String(email).trim() !== "") {
-        const bcId = emailToId.get(String(email).toLowerCase().trim());
+      const emailStr = email != null ? String(email).trim() : "";
+      if (emailStr !== "") {
+        const bcId = emailToId.get(emailStr.toLowerCase());
         if (bcId && !result.includes(bcId)) result.push(bcId);
       }
     } catch {
@@ -51,7 +57,8 @@ async function resolveBasecampPersonForSlackUser(slackClient, basecampConfig, sl
     bcPeople = await listPeople(basecampConfig);
     cache.set(basecampConfig.accountId, bcPeople);
   }
-  const person = bcPeople.find((p) => p.id === ids[0]);
+  const peopleList = Array.isArray(bcPeople) ? bcPeople : [];
+  const person = peopleList.find((p) => p != null && p.id === ids[0]);
   if (!person || !person.attachable_sgid) return null;
   return {
     id: person.id,
