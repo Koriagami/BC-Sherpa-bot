@@ -1,0 +1,21 @@
+{
+  "name": "bc-sherpa-bot",
+  "version": "1.0.0",
+  "description": "Slack bot that transfers reported issues to Basecamp tasks via :basecamp: emoji",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "basecamp-oauth": "node scripts/basecamp-oauth.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["slack", "basecamp", "bot", "openai"],
+  "license": "MIT",
+  "dependencies": {
+    "@slack/bolt": "^3.17.0",
+    "openai": "^4.28.0",
+    "dotenv": "^16.4.5"
+  }
+}
